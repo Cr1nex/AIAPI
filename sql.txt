@@ -1,0 +1,29 @@
+use mlops;
+DROP TABLE IF EXISTS prompts;
+DROP TABLE IF EXISTS users;
+CREATE TABLE users(
+`id` int(20) NOT NULL AUTO_INCREMENT,
+`username` varchar(20) NOT NULL UNIQUE,
+`email` varchar(20) NOT NULL UNIQUE,
+`hashed_password` varchar(100) NOT NULL,
+`first_name` varchar(20) DEFAULT NULL,
+`last_name` varchar(20) DEFAULT NULL,
+`phone_number` int(20) NOT NULL UNIQUE,
+`is_active` bool,
+`deleted_account` bool DEFAULT NULL,
+`role` varchar(20) DEFAULT NULL,
+PRIMARY KEY(`id`)
+);
+
+CREATE TABLE prompts(
+`id` int(20) NOT NULL AUTO_INCREMENT,
+`title` varchar(20) DEFAULT NULL,
+`description` varchar(20) DEFAULT NULL,
+`deleted_prompt` bool DEFAULT NULL,
+`owner_id` int(20) NOT NULL,
+PRIMARY KEY(`id`),
+FOREIGN KEY (`owner_id`) REFERENCES users(`id`)
+
+
+);
+

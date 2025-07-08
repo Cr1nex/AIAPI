@@ -1,3 +1,4 @@
+from datetime import datetime ,timezone
 from fastapi import APIRouter,Depends,HTTPException
 from typing import Annotated
 from ..database import SessionLocal
@@ -18,14 +19,19 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 from typing_extensions import Annotated, TypedDict
 import os
+from langchain_core.documents import Document
 import streamlit as st
+from fastapi import Depends, APIRouter
+from ..ragchain import build_chain
+from .auth import get_current_user
+from ..mongodb import queries_collection
 try:
     from dotenv import load_dotenv
 
     load_dotenv()
 except ImportError:
     pass
-os.environ["LANGSMITH_TRACING"] = "true"
+'''os.environ["LANGSMITH_TRACING"] = "true"
 if "LANGSMITH_API_KEY" not in os.environ:
     os.environ["LANGSMITH_API_KEY"] = getpass.getpass(
         prompt="Enter your LangSmith API key (optional): "
@@ -98,12 +104,18 @@ workflow.add_node("model", call_model)
 memory = MemorySaver()
 app = workflow.compile(checkpointer=memory)
 
-config = {"configurable": {"thread_id": "abc678"}}
+config = {"configurable": {"thread_id": "abc678"}}'''
 
 
 router = APIRouter(prefix="/prompts",
                    tags=["prompts"])
+qa_chain, embeddings = build_chain()
 
+def document_to_dict(doc: Document):
+    return {
+        "page_content": doc.page_content,
+        "metadata": doc.metadata
+    }
 
 def get_db():
     db = SessionLocal()
@@ -117,10 +129,77 @@ user_dependency = Annotated[dict,Depends(get_current_user)]
 
 class create_prompt(BaseModel):
     title : str
-    description :str
+    question :str
+
 
 
 @router.post("/create-prompt")
+async def create_prompt(create:create_prompt,db:db_dependency,user:user_dependency):
+    
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    user_id = user.get("user_id") 
+    # Run RAG chain
+    result = await qa_chain.ainvoke({
+    "input": create.question
+})
+
+    if not result:
+        raise HTTPException(status_code=400, detail="No answer generated")
+
+    # Store embeddings + question + answer in MongoDB
+    embedding_vector = embeddings.embed_query(create.question)
+    result["context"] = [document_to_dict(doc) for doc in result["context"]]
+
+
+    queries_collection.insert_one(
+        {
+            "user_id": user_id,
+            "question": create.question,
+            "answer": result,
+            "embedding": embedding_vector,
+            "timestamp": datetime.now(timezone.utc),
+        }
+    )
+
+    # Save prompt metadata to SQL
+    new_prompt = Prompts(
+        title=create.title,
+        question=create.question,  # or result if you prefer
+        owner_id=user_id,
+    )
+    db.add(new_prompt)
+    db.commit()
+    db.refresh(new_prompt)
+
+    return {"answer": result}
+    
+
+   
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+"""@router.post("/create-prompt")
 async def create_prompt(create:create_prompt,db:db_dependency,user:user_dependency):
     
     if user == None:
@@ -146,4 +225,4 @@ async def create_prompt(create:create_prompt,db:db_dependency,user:user_dependen
                              )    
     db.add(created_prompt)
     db.commit()
-    return result.content
+    return result.content"""

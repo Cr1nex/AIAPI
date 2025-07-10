@@ -1,5 +1,7 @@
 from fastapi import APIRouter,Depends,HTTPException
 from typing import Annotated
+
+from fastapi.responses import JSONResponse
 from ..database import SessionLocal
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -42,6 +44,9 @@ class Create_User_Request(BaseModel):
     phone_number:str
     password:str
 
+class Token_Data(BaseModel):
+    username:str
+    password:str
 
 class Token(BaseModel):
     access_token: str
@@ -110,7 +115,15 @@ async def login(db:db_dependency,form_data: Annotated[OAuth2PasswordRequestForm,
     token = create_access_token(user.username,user.id,user.role,timedelta(minutes=20))
     return {"access_token": token , "token_type": "bearer"}
 
-
+@router.post("/cookie/")
+def create_cookie(db:db_dependency,form_data:Token_Data):
+    user = authenticate_user(db,form_data.username,form_data.password)
+    if user is None:
+        raise HTTPException(status_code=400, detail="Pls Login")
+    token = create_access_token(user.username,user.id,user.role,timedelta(minutes=20))
+    response = JSONResponse(content={"access_token": token, "token_type": "bearer"})
+    response.set_cookie(key="access_token", value=token, httponly=True)
+    return response
 
 
 

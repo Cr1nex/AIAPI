@@ -107,6 +107,7 @@ def retrieve_past_queries(question, embeddings,db ,user,top_k=3):
     
     query_emb = embeddings.embed_query(question)
     past_queries = list(queries_collection.find({"embedding": {"$exists": True}}))
+    
 
     def cosine_sim(a, b):
         a, b = np.array(a), np.array(b)

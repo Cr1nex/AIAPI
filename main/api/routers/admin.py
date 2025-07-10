@@ -19,7 +19,7 @@ def get_db():
 db_dependency = Annotated[Session,Depends(get_db)]
 user_dependency = Annotated[dict,Depends(get_current_user)]
 
-@router.get("/")
+@router.get("/getusers")
 async def get_users(db:db_dependency,usera:user_dependency):
     if usera.get("user_role") != "admin":
         raise HTTPException(status_code=401,detail="Not Authenticated")

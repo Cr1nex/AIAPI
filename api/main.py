@@ -23,4 +23,4 @@ app.include_router(users.router)
 app.include_router(prompts.router)
 
 if __name__ == "__main__":
-    uvicorn.run(app="mlops.main:app",host="127.0.0.1",port=8000,reload=True)
+    uvicorn.run(app="api.main:app",host="127.0.0.1",port=8000,reload=True)

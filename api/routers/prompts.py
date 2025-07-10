@@ -22,7 +22,7 @@ except ImportError:
 
 router = APIRouter(prefix="/prompts",
                    tags=["prompts"])
-qa_chain, embeddings = build_chain()
+
 
 def document_to_dict(doc: Document):
     return {
@@ -52,7 +52,7 @@ async def create_prompt(create:create_prompt,db:db_dependency,user:user_dependen
     if user is None:
         raise HTTPException(status_code=401, detail="Not logged in")
     user_id = user.get("user_id") 
-    
+    qa_chain, embeddings = build_chain(user_id,db)
     result = await qa_chain.ainvoke({
     "input": create.question
 })
@@ -63,19 +63,6 @@ async def create_prompt(create:create_prompt,db:db_dependency,user:user_dependen
    
     embedding_vector = embeddings.embed_query(create.question)
     result["context"] = [document_to_dict(doc) for doc in result["context"]]
-
-
-    queries_collection.insert_one(
-        {
-            "user_id": user_id,
-            "question": create.question,
-            "answer": result,
-            "embedding": embedding_vector,
-            "timestamp": datetime.now(timezone.utc),
-        }
-    )
-
-    
     new_prompt = Prompts(
         title=create.title,
         question=create.question,  
@@ -84,6 +71,20 @@ async def create_prompt(create:create_prompt,db:db_dependency,user:user_dependen
     db.add(new_prompt)
     db.commit()
     db.refresh(new_prompt)
+    prompt_id_current=new_prompt.id
+    queries_collection.insert_one(
+        {
+            "user_id": user_id,
+            "question": create.question,
+            "answer": result,
+            "embedding": embedding_vector,
+            "timestamp": datetime.now(timezone.utc),
+            "sql_prompt_id": prompt_id_current
+        }
+    )
+
+    
+    
 
     return {"answer": result}
     

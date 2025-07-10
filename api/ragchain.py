@@ -3,6 +3,7 @@ import pickle
 import shutil
 import tempfile
 import faiss
+from fastapi import Depends
 import numpy as np
 from langchain_community.vectorstores import FAISS
 from langchain_community.document_loaders import WebBaseLoader
@@ -14,10 +15,16 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain.schema import Document
 from langchain_core.retrievers import BaseRetriever
 from bs4 import SoupStrainer
-
+from typing import Annotated
+from .models import Users,Prompts
+from sqlalchemy.orm import Session
 
 from .llm import embeddings, llm
 from .mongodb import queries_collection, rag_collection
+from .database import SessionLocal
+
+
+
 
 VECTOR_DB_PATH = "faiss_index"
 
@@ -96,7 +103,8 @@ def build_faiss_store():
     return vector_store, embeddings
 
 
-def retrieve_past_queries(question, embeddings, top_k=3):
+def retrieve_past_queries(question, embeddings,db ,user,top_k=3):
+    
     query_emb = embeddings.embed_query(question)
     past_queries = list(queries_collection.find({"embedding": {"$exists": True}}))
 
@@ -109,8 +117,16 @@ def retrieve_past_queries(question, embeddings, top_k=3):
         emb = q.get("embedding")
         if emb is None:
             continue
-        score = cosine_sim(query_emb, emb)
-        scored.append((score, q))
+        current_prompt=db.query(Prompts).filter(Prompts.id == q.get("sql_prompt_id")).first()
+        if current_prompt == None:
+            continue
+        if  user == q.get("user_id"):
+            score = cosine_sim(query_emb, emb)
+            scored.append((score, q))
+            
+        else:
+            continue
+    db.close()
     scored.sort(key=lambda x: x[0], reverse=True) #Improve later on too many past context might lead to failure
     top = scored[:top_k]
     return [Document(page_content=f"{doc['question']}\n{doc['answer']}") for _, doc in top]
@@ -122,12 +138,13 @@ prompt = ChatPromptTemplate.from_messages([
 ])
 
 
-def build_chain():
+def build_chain(user,db):
     vector_store, embeddings = build_faiss_store()
 
     def combined_retriever(query: str):
+        
         faiss_docs = vector_store.similarity_search(query, k=3)
-        past_query_docs = retrieve_past_queries(query, embeddings, top_k=3)
+        past_query_docs = retrieve_past_queries(query, embeddings, db,user,top_k=3)
         return faiss_docs + past_query_docs
 
     class CombinedRetriever(BaseRetriever):

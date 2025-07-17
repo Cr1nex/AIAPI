@@ -52,10 +52,9 @@ async def create_prompt(create:create_prompt,db:db_dependency,user:user_dependen
     if user is None:
         raise HTTPException(status_code=401, detail="Not logged in")
     user_id = user.get("user_id") 
-    qa_chain, embeddings = build_chain(user_id,db)
-    result = await qa_chain.ainvoke({
-    "input": create.question
-})
+    qa_chain, embeddings = await build_chain(user_id,db)
+    result = await qa_chain.ainvoke({"input": create.question})
+
 
     if not result:
         raise HTTPException(status_code=400, detail="No answer generated")
@@ -63,6 +62,7 @@ async def create_prompt(create:create_prompt,db:db_dependency,user:user_dependen
    
     embedding_vector = embeddings.embed_query(create.question)
     result["context"] = [document_to_dict(doc) for doc in result["context"]]
+    
     new_prompt = Prompts(
         title=create.title,
         question=create.question,  
@@ -76,7 +76,7 @@ async def create_prompt(create:create_prompt,db:db_dependency,user:user_dependen
         {
             "user_id": user_id,
             "question": create.question,
-            "answer": result,
+            "answer": result["answer"],
             "embedding": embedding_vector,
             "timestamp": datetime.now(timezone.utc),
             "sql_prompt_id": prompt_id_current
@@ -86,6 +86,6 @@ async def create_prompt(create:create_prompt,db:db_dependency,user:user_dependen
     
     
 
-    return {"answer": result}
+    return {result["answer"]}
     
 

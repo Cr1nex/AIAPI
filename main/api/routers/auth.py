@@ -23,8 +23,6 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 router = APIRouter(prefix="/auth",
                    tags=["auth"])
 
-
-
 def get_db():
     db = SessionLocal()
     try:
@@ -63,7 +61,7 @@ def get_password_hash(password):
 def create_access_token(username:str,user_id:int,user_role:str,expires:timedelta):
     encode = {"sub":username,"id":user_id,"role":user_role}
     expires = datetime.now(timezone.utc) + expires
-    encode.update({"exp":expires})
+    encode.update({"exp": int(expires.timestamp())})
     return jwt.encode(encode,SECRET_KEY,algorithm = ALGORITHM)
 
 
@@ -79,7 +77,9 @@ def authenticate_user(db, username: str, password: str):
 
 async def get_current_user(token: Annotated[str, Depends(oauth2_bearer)]):
     try:
+        
         payload = jwt.decode(token,SECRET_KEY,algorithms=ALGORITHM)
+    
         username : str  = payload.get("sub")
         user_role : str = payload.get("role")
         user_id : int = payload.get("id")
@@ -90,7 +90,13 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_bearer)]):
     except JWTError:
         raise HTTPException(status_code=401 , detail="Could not validate")
         
-
+@router.get("/me")
+async def read_current_user(user: Annotated[dict, Depends(get_current_user)]):
+    return {
+        "username": user["sub"],
+        "user_id": user["user_id"],
+        "role": user["user_role"]
+    }
 @router.post("/create-user")
 async def create_user(create :Create_User_Request,db:db_dependency):
     new_hashed_password = get_password_hash(create.password)
@@ -115,6 +121,10 @@ async def login(db:db_dependency,form_data: Annotated[OAuth2PasswordRequestForm,
     token = create_access_token(user.username,user.id,user.role,timedelta(minutes=20))
     return {"access_token": token , "token_type": "bearer"}
 
+
+
+
+"""
 @router.post("/cookie/")
 def create_cookie(db:db_dependency,form_data:Token_Data):
     user = authenticate_user(db,form_data.username,form_data.password)
@@ -122,10 +132,10 @@ def create_cookie(db:db_dependency,form_data:Token_Data):
         raise HTTPException(status_code=400, detail="Pls Login")
     token = create_access_token(user.username,user.id,user.role,timedelta(minutes=20))
     response = JSONResponse(content={"access_token": token, "token_type": "bearer"})
-    response.set_cookie(key="access_token", value=token, httponly=True)
+    response.set_cookie(key="access_token", value=token, httponly=True,secure=False,samesite="None")
     return response
 
-
+"""
 
     
 

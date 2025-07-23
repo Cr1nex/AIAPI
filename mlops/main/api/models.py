@@ -23,4 +23,5 @@ class Prompts(Base):
     title = Column(String)
     question = Column(String)
     deleted_prompt = Column(Boolean,default=False)
+    session_id = Column(Integer,default=False)
     owner_id = Column(Integer,ForeignKey("users.id"))

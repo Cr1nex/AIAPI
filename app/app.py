@@ -1,6 +1,6 @@
 import streamlit as st
 import requests
-
+import time
 API_URL = "http://localhost:8000"
 
 #funcs
@@ -37,21 +37,30 @@ def get_session_messages(token, session_id):
     r = requests.get(f"{API_URL}/prompts/chat/session/{session_id}", headers=headers)
     return r.json() if r.status_code == 200 else []
 
-def ask_llm(token, question, session_id=0):
+def ask_llm(token, question, session_id: str = "0"):
     headers = {"Authorization": f"Bearer {token}"}
-    payload = {"question": question, "session_id": session_id}
-    if session_id:
-        payload["session_id"] = session_id
-    else:
-        payload["session_id"] = session_id
+    payload = {"question": question,"session_id": session_id}
+    
+    
     r = requests.post(f"{API_URL}/prompts/create-prompt", json=payload, headers=headers)
     return r.json() if r.status_code == 200 else {"error": r.text}
+def stream_response(text):
+    if "chat_response" not in st.session_state:
+        st.session_state.chat_response = ""
 
+    st.session_state.chat_response = "" 
+
+    output_placeholder = st.empty()  
+
+    for word in text.split():
+        st.session_state.chat_response += word + " "
+        output_placeholder.markdown(st.session_state.chat_response)
+        time.sleep(0.03)  
 #main
 def main():
     st.set_page_config(page_title="Chat + Auth")
 
-    #session State
+    #session state
     if "access_token" not in st.session_state:
         st.session_state["access_token"] = None
     if "authentication_status" not in st.session_state:
@@ -63,8 +72,9 @@ def main():
     if "chat_sessions" not in st.session_state:
         st.session_state["chat_sessions"] = []
     if "selected_session" not in st.session_state:
-        st.session_state["selected_session"] = None
-
+        st.session_state["selected_session"] = "0"
+    if "chat_history" not in st.session_state:
+        st.session_state["chat_history"] = []
     #sidebar
     with st.sidebar:
         st.title("LLM App")
@@ -76,17 +86,45 @@ def main():
                 st.session_state["access_token"] = None
                 st.session_state["authentication_status"] = False
                 st.session_state["username"] = ""
-                st.session_state["selected_session"] = None
+                st.session_state["selected_session"] = "0"
+                st.session_state["chat_history"] = []
+                st.session_state["chat_sessions"] = []
                 st.rerun()
             if st.button("New Chat"):
-                return None
+                new_session=add_session(st.session_state["access_token"])
+                if new_session:
+                    st.session_state["chat_sessions"] = get_sessions(st.session_state["access_token"])
+                    st.session_state["selected_session"] = str(new_session["new_session_id"])
+                    st.session_state["chat_history"] = []
+            if st.button("Who Am I?"):
+                r = whoami(st.session_state["access_token"])
+                if r.status_code == 200:
+                    st.json(r.json())
+                else:
+                    st.error("Invalid token")
+            
             st.markdown("---")
             st.header("Chat Sessions")
-            if st.session_state["chat_sessions"] != get_sessions(st.session_state["access_token"]):
+            if not st.session_state["chat_sessions"]:
                 st.session_state["chat_sessions"] = get_sessions(st.session_state["access_token"])
-            if get_sessions(st.session_state["access_token"]) == st.session_state["chat_sessions"]:
-                session_options = st.session_state["chat_sessions"]
-                st.session_state["selected_session"] = st.selectbox("Choose session", session_options)
+
+            session_options = [str(sess["session_id"]) for sess in st.session_state["chat_sessions"]]
+            session_titles = [sess["title"] for sess in st.session_state["chat_sessions"]]
+
+            if session_options:
+                
+                
+
+                
+                selected_idx = st.selectbox(
+                    "Choose session",
+                    range(len(session_options)),
+                    format_func=lambda i: session_titles[i] if i < len(session_titles) else "Unknown"
+                )
+
+                st.session_state["selected_session"] = session_options[selected_idx]
+            else:
+                st.warning("No sessions available. Start a new chat.")
 
     #login
     if st.session_state["view"] == "Login":
@@ -107,40 +145,60 @@ def main():
                     st.error("Login failed")
 
         else:
+            
             st.title("LLM Chat")
+            
 
             
-            if st.session_state["selected_session"]:
-                messages = get_session_messages(st.session_state["access_token"], st.session_state["selected_session"])
-                st.markdown("### Chat History")
-                for msg in messages:
-                    msg = msg.get("role")
-                    if msg == "user":
-                        st.markdown(f"**You**: {msg['content']}")
-                    if msg is not None:
-                        st.markdown(f"**Bot**: {msg.get('content', '')}")
-                    else:
-                        st.markdown("**Bot**: (no content)")
-
-            st.markdown("---")
             st.header("Ask the LLM")
+            if st.session_state["selected_session"] != "0":
+                messages = get_session_messages(st.session_state["access_token"], st.session_state["selected_session"])
+                
+                for msg in messages:
+                    if msg["question"] == "__init__":
+                        continue
+                    user_q = msg.get("question", "")
+                    bot_a = msg.get("answer", "")
+                    st.markdown(f"**🥷**: {user_q}")
+                    st.markdown(f"**👾**: {bot_a}")
+            else:
+                st.info("No chat session selected yet. Start a new chat or send a message to create a session.")   
 
-            question = st.text_area("Enter your question")
-            if st.button("Ask"):
-                data = ask_llm(st.session_state["access_token"], question, st.session_state["selected_session"])
-                if "error" in data:
-                    st.error("Prompt failed")
-                    st.text(data["error"])
-                else:
-                    st.success("LLM responded:")
-                    st.write(data["answer"])
+            question = st.text_input("Ask something")
+            
 
-            if st.button("Who Am I?"):
-                r = whoami(st.session_state["access_token"])
-                if r.status_code == 200:
-                    st.json(r.json())
-                else:
-                    st.error("Invalid token")
+
+            if st.button("Send") and question:
+                try:
+                    session_id = st.session_state["selected_session"]
+                    
+
+                    data = ask_llm(st.session_state["access_token"], question, session_id)
+
+                    if "error" in data:
+                        st.error(f"API Error: {data['error']}")
+                    else:
+                        answer = data.get("answer")
+                        
+
+                        
+                        st.markdown(f"**🥷**: {question}")
+                        
+                        if answer:
+                            stream_response(answer)
+
+                        
+                        st.session_state["chat_sessions"] = get_sessions(st.session_state["access_token"])
+                        if "new_session_id" in data:
+                            st.session_state["selected_session"] = str(data["new_session_id"])
+                except Exception as e:
+                    st.error(f"Unexpected error: {e}")
+            
+                 
+
+                    
+
+            
 
     #register
     elif st.session_state["view"] == "Register":

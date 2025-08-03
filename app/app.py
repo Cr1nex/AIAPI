@@ -96,6 +96,7 @@ def main():
                     st.session_state["chat_sessions"] = get_sessions(st.session_state["access_token"])
                     st.session_state["selected_session"] = str(new_session["new_session_id"])
                     st.session_state["chat_history"] = []
+                    st.rerun()
             if st.button("Who Am I?"):
                 r = whoami(st.session_state["access_token"])
                 if r.status_code == 200:
@@ -122,7 +123,12 @@ def main():
                     format_func=lambda i: session_titles[i] if i < len(session_titles) else "Unknown"
                 )
 
-                st.session_state["selected_session"] = session_options[selected_idx]
+                
+                selected_option = session_options[selected_idx]
+                if selected_option != st.session_state.get("selected_session"):
+                    st.session_state["selected_session"] = selected_option
+                    st.rerun()
+
             else:
                 st.warning("No sessions available. Start a new chat.")
 
@@ -168,7 +174,7 @@ def main():
             
 
 
-            if st.button("Send") and question:
+            if st.button("Send"):
                 try:
                     session_id = st.session_state["selected_session"]
                     
@@ -187,10 +193,12 @@ def main():
                         if answer:
                             stream_response(answer)
 
-                        
-                        st.session_state["chat_sessions"] = get_sessions(st.session_state["access_token"])
-                        if "new_session_id" in data:
-                            st.session_state["selected_session"] = str(data["new_session_id"])
+                                         
+                        if data["session_id"] and data["session_id"] != st.session_state["selected_session"]:
+                            st.session_state["selected_session"] = str(data["session_id"])
+                            st.session_state["chat_sessions"] = get_sessions(st.session_state["access_token"])
+                             
+                          
                 except Exception as e:
                     st.error(f"Unexpected error: {e}")
             

@@ -2,12 +2,12 @@ accelerate==0.33.0
 datasets==2.20.0
 cryptography
 pillow==10.4.0
-dotenv
-jinja2==3.1.4
+python-dotenv
+
 torch==2.3.1
 torchvision==0.18.1
 torchaudio==2.3.1
-boto3==1.34.149
+beautifulsoup4
 uvicorn==0.30.4
 fastapi==0.111.1
 seaborn==0.13.2
@@ -25,12 +25,12 @@ sentence-transformers==2.6.0
 
 tokenizers==0.20.3
 transformers==4.46.0 
-
+langchain-redis==0.2.3
 faiss-cpu==1.11.0
 langchain
 passlib
 pymongo
 langchain-community
 langchain-google-genai
-redis
-scikit-learn
+redis==6.2.0
+redisvl==0.8.0

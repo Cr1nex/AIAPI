@@ -45,19 +45,31 @@ def add_session_to_user(redis_client, user_id, session_id, title):
 def get_sessions(redis_client, user_id):
     sessions = redis_client.hgetall(f"chat:sessions:{user_id}")
     return {k.decode(): v.decode() for k, v in sessions.items()}
-
 def get_session_pairs(redis_client, user_id, session_id):
     pattern = f"chat:session:{user_id}:{session_id}:*"
     keys = redis_client.keys(pattern)
+
+    
+    def extract_prompt_id(key):
+        try:
+            return int(key.decode().split(":")[-1])
+        except Exception:
+            return float("inf")  
+
+    sorted_keys = sorted(keys, key=extract_prompt_id)
+
     all_pairs = []
-    for key in keys:
+    for key in sorted_keys:
         raw_pairs = redis_client.lrange(key, 0, -1)
         for p in raw_pairs:
             try:
                 all_pairs.append(json.loads(p.decode("utf-8")))
             except Exception:
                 continue
+
     return all_pairs
+
+
 
 class CreatePrompt(BaseModel):
     question: str
@@ -205,4 +217,4 @@ async def create_prompt(create: CreatePrompt, db: db_dependency, user: user_depe
     redis_client.ltrim(f"chat:session:{user_id}:{session_id_str}:{prompt_id}", 0, 99)
     add_session_to_user(redis_client, user_id, session_id_str, short_title)
 
-    return {"answer": result["answer"]}
+    return {"answer": result["answer"],"session_id": session_id_str}
